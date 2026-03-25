@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIS AD GPO Hardening Script — Preview</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;display:flex;flex-direction:column}
+header{background:#161b22;border-bottom:1px solid #30363d;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-size:18px;font-weight:600;color:#58a6ff;letter-spacing:-0.3px}
+.meta{font-size:12px;color:#8b949e;display:flex;gap:12px;flex-wrap:wrap}
+.badge{background:#1f6feb22;border:1px solid #1f6feb55;color:#58a6ff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500}
+.badge.green{background:#23863622;border-color:#23863655;color:#3fb950}
+.badge.orange{background:#d2930022;border-color:#d2930055;color:#d29300}
+.layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - 53px)}
+.sidebar{width:240px;flex-shrink:0;background:#161b22;border-right:1px solid #30363d;overflow-y:auto;padding:8px 0}
+.sidebar-section{padding:6px 12px 4px;font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.8px;margin-top:4px}
+.file-item{display:flex;align-items:center;gap:8px;padding:5px 16px;cursor:pointer;font-size:12px;color:#8b949e;transition:all .1s;border-left:2px solid transparent}
+.file-item:hover{background:#ffffff08;color:#e6edf3}
+.file-item.active{background:#1f6feb22;color:#58a6ff;border-left-color:#58a6ff}
+.file-icon{width:14px;height:14px;flex-shrink:0;opacity:.7}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.toolbar{background:#161b22;border-bottom:1px solid #30363d;padding:8px 16px;display:flex;align-items:center;gap:8px}
+.filepath{font-size:12px;color:#8b949e;font-family:'SF Mono',Consolas,monospace}
+.filepath .hl{color:#58a6ff}
+.stats{margin-left:auto;font-size:11px;color:#8b949e;display:flex;gap:10px}
+.code-area{flex:1;overflow:auto;padding:0}
+pre{font-family:'SF Mono',Consolas,'Cascadia Code',monospace;font-size:12.5px;line-height:1.6;padding:16px 0;min-height:100%}
+.line{display:flex;min-width:0}
+.ln{min-width:44px;text-align:right;padding:0 12px 0 0;color:#484f58;user-select:none;flex-shrink:0}
+.lc{flex:1;padding:0 16px 0 4px;white-space:pre;overflow-x:visible}
+.lc:hover{background:#ffffff05}
+
+/* PS syntax highlighting */
+.kw{color:#ff7b72}       /* keywords */
+.cm{color:#8b949e;font-style:italic} /* comments */
+.str{color:#a5d6ff}      /* strings */
+.var{color:#ffa657}      /* variables */
+.fn{color:#d2a8ff}       /* function names */
+.op{color:#79c0ff}       /* operators / types */
+.num{color:#79c0ff}      /* numbers */
+.pm{color:#e3b341}       /* parameters */
+.doc{color:#3fb950;font-style:italic} /* doc comments */
+.attr{color:#ffa657}     /* attributes */
+
+.overview{padding:24px;overflow-y:auto;flex:1}
+.ov-header{font-size:22px;font-weight:600;color:#e6edf3;margin-bottom:6px}
+.ov-sub{font-size:13px;color:#8b949e;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:28px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px;cursor:pointer;transition:all .15s}
+.card:hover{border-color:#58a6ff55;background:#1f6feb11}
+.card-name{font-size:13px;font-weight:500;color:#58a6ff;margin-bottom:4px}
+.card-desc{font-size:11px;color:#8b949e;line-height:1.4}
+.card-meta{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tag{font-size:10px;padding:1px 6px;border-radius:10px;background:#21262d;color:#8b949e;border:1px solid #30363d}
+.tag.l1{background:#23863611;color:#3fb950;border-color:#23863633}
+.tag.l2{background:#d2930011;color:#d29300;border-color:#d2930033}
+.tag.dc{background:#8957e511;color:#bc8cff;border-color:#8957e533}
+.section-title{font-size:13px;font-weight:600;color:#8b949e;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #30363d}
+.quickcmd{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px 14px;margin-bottom:8px}
+.qc-label{font-size:10px;color:#8b949e;margin-bottom:4px;text-transform:uppercase;letter-spacing:.6px}
+.qc-code{font-family:'SF Mono',Consolas,monospace;font-size:12px;color:#a5d6ff}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">CIS AD GPO Hardening Script</span>
+  <div class="meta">
+    <span class="badge green">v1.0</span>
+    <span class="badge">13 modules</span>
+    <span class="badge">158+ CIS controls</span>
+    <span class="badge orange">Requires Domain Admin</span>
+    <span>WS2019 · WS2022 · Win10 · Win11</span>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="file-item active" onclick="showOverview()">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#8b949e"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 1.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13zM7.25 4.5v5.5h1.5V4.5h-1.5zm0 6.5v1.5h1.5V11h-1.5z"/></svg>
+      Overview
+    </div>
+    <div class="file-item" onclick="showFile('orchestrator')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#3fb950"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      Invoke-CISHardening.ps1
+    </div>
+
+    <div class="sidebar-section">Core Modules</div>
+    <div class="file-item" onclick="showFile('logging')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#58a6ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      Logging.psm1
+    </div>
+    <div class="file-item" onclick="showFile('roledetection')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#58a6ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      RoleDetection.psm1
+    </div>
+    <div class="file-item" onclick="showFile('snapshot')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#58a6ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      Snapshot.psm1
+    </div>
+
+    <div class="sidebar-section">Hardening Modules</div>
+    <div class="file-item" onclick="showFile('accountpolicy')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      AccountPolicy.psm1
+    </div>
+    <div class="file-item" onclick="showFile('auditpolicy')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      AuditPolicy.psm1
+    </div>
+    <div class="file-item" onclick="showFile('secopts')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      SecurityOptions.psm1
+    </div>
+    <div class="file-item" onclick="showFile('userrights')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      UserRights.psm1
+    </div>
+    <div class="file-item" onclick="showFile('tls')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      TLSHardening.psm1
+    </div>
+    <div class="file-item" onclick="showFile('network')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      NetworkHardening.psm1
+    </div>
+    <div class="file-item" onclick="showFile('winrm')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      WinRMHardening.psm1
+    </div>
+    <div class="file-item" onclick="showFile('services')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      ServicesHardening.psm1
+    </div>
+    <div class="file-item" onclick="showFile('registry')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      RegistryHardening.psm1
+    </div>
+    <div class="file-item" onclick="showFile('firewall')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      FirewallPolicy.psm1
+    </div>
+    <div class="file-item" onclick="showFile('defender')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      DefenderPolicy.psm1
+    </div>
+    <div class="file-item" onclick="showFile('privaccess')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      PrivilegedAccess.psm1
+    </div>
+    <div class="file-item" onclick="showFile('report')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#d2a8ff"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      HardeningReport.psm1
+    </div>
+
+    <div class="sidebar-section">Profiles</div>
+    <div class="file-item" onclick="showFile('dc-profile')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#e3b341"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      DomainController.json
+    </div>
+    <div class="file-item" onclick="showFile('ms-profile')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#e3b341"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      MemberServer.json
+    </div>
+    <div class="file-item" onclick="showFile('ws-profile')">
+      <svg class="file-icon" viewBox="0 0 16 16" fill="#e3b341"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11z"/></svg>
+      Workstation.json
+    </div>
+  </div>
+
+  <div class="main" id="main-area">
+    <!-- Overview shown by default -->
+    <div class="overview" id="overview-panel">
+      <div class="ov-header">CIS AD GPO Hardening Script v1.0</div>
+      <div class="ov-sub">21 files &nbsp;·&nbsp; 13 hardening modules &nbsp;·&nbsp; 158+ CIS controls &nbsp;·&nbsp; PowerShell 5.1+</div>
+
+      <div class="section-title">Quick start</div>
+      <div class="quickcmd"><div class="qc-label">Audit mode — readiness check, no changes</div><div class="qc-code">.\Invoke-CISHardening.ps1 -AuditMode</div></div>
+      <div class="quickcmd"><div class="qc-label">Preview all changes (WhatIf)</div><div class="qc-code">.\Invoke-CISHardening.ps1 -WhatIf</div></div>
+      <div class="quickcmd"><div class="qc-label">Apply Level 1 hardening</div><div class="qc-code">.\Invoke-CISHardening.ps1 -Level L1</div></div>
+      <div class="quickcmd"><div class="qc-label">Apply specific modules only</div><div class="qc-code">.\Invoke-CISHardening.ps1 -Level L1 -Modules AccountPolicy,AuditPolicy,TLSHardening</div></div>
+      <div class="quickcmd"><div class="qc-label">Apply Level 2 with ASR in Block mode</div><div class="qc-code">.\Invoke-CISHardening.ps1 -Level L2 -ASRMode Block</div></div>
+      <div class="quickcmd"><div class="qc-label">Rollback all changes</div><div class="qc-code">.\Invoke-CISHardening.ps1 -Rollback -RollbackPath .\CISHardening_Output\Rollback\&lt;timestamp&gt;</div></div>
+
+      <br>
+      <div class="section-title">Modules — click to browse source</div>
+      <div class="grid">
+        <div class="card" onclick="showFile('orchestrator')"><div class="card-name">Invoke-CISHardening.ps1</div><div class="card-desc">Main orchestrator. Role detection, module dispatch, logging init, snapshot trigger.</div><div class="card-meta"><span class="tag l1">Entry point</span></div></div>
+        <div class="card" onclick="showFile('logging')"><div class="card-name">Logging</div><div class="card-desc">Centralised log with colour-coded console output and structured entries list.</div><div class="card-meta"><span class="tag">Core</span></div></div>
+        <div class="card" onclick="showFile('roledetection')"><div class="card-name">RoleDetection</div><div class="card-desc">Reads Win32_ComputerSystem.DomainRole, resolves DC OU, validates RSAT modules.</div><div class="card-meta"><span class="tag">Core</span></div></div>
+        <div class="card" onclick="showFile('snapshot')"><div class="card-name">Snapshot + Rollback</div><div class="card-desc">3-layer rollback: Backup-GPO, secedit export, auditpol backup. Tracks GPO GUIDs in manifest.json.</div><div class="card-meta"><span class="tag">Core</span></div></div>
+        <div class="card" onclick="showFile('accountpolicy')"><div class="card-name">AccountPolicy</div><div class="card-desc">Password, lockout, Kerberos (AES-only, DC). secedit INF + GPO.</div><div class="card-meta"><span class="tag l1">CIS 1.1–1.3</span><span class="tag dc">DC: Kerberos</span></div></div>
+        <div class="card" onclick="showFile('auditpolicy')"><div class="card-name">AuditPolicy</div><div class="card-desc">53 audit subcategories via auditpol.exe. Command line logging, 90% log warning.</div><div class="card-meta"><span class="tag l1">CIS 17.x</span><span class="tag l2">+L2</span></div></div>
+        <div class="card" onclick="showFile('secopts')"><div class="card-name">SecurityOptions</div><div class="card-desc">UAC, SMB signing, LM auth, WDigest, LDAP signing+channel binding, NTLM, null sessions.</div><div class="card-meta"><span class="tag l1">CIS 2.3.x</span><span class="tag dc">DC: LDAP CB</span></div></div>
+        <div class="card" onclick="showFile('userrights')"><div class="card-name">UserRights</div><div class="card-desc">39 privilege assignments. SeTcbPrivilege=empty, SeCreateTokenPrivilege=empty, deny local accts on MS.</div><div class="card-meta"><span class="tag l1">CIS 2.2.x</span></div></div>
+        <div class="card" onclick="showFile('tls')"><div class="card-name">TLSHardening</div><div class="card-desc">Disable SSL2/3, TLS 1.0/1.1. Enable TLS 1.2/1.3. RC4/DES/NULL ciphers off. DH min 2048.</div><div class="card-meta"><span class="tag l1">SChannel</span><span class="tag" style="color:#ff7b72;border-color:#ff7b7244">Reboot</span></div></div>
+        <div class="card" onclick="showFile('network')"><div class="card-name">NetworkHardening</div><div class="card-desc">LLMNR, NetBIOS, WPAD, SMBv1 disabled. Source routing, ICMP redirects off. NTLM audit.</div><div class="card-meta"><span class="tag l1">CIS 18.5.x</span><span class="tag l2">+IPv6</span></div></div>
+        <div class="card" onclick="showFile('winrm')"><div class="card-name">WinRMHardening</div><div class="card-desc">Disable basic auth, unencrypted traffic, digest, Windows Remote Shell.</div><div class="card-meta"><span class="tag l1">CIS 18.9.102</span></div></div>
+        <div class="card" onclick="showFile('services')"><div class="card-name">ServicesHardening</div><div class="card-desc">Telnet, FTP, RemoteRegistry, SNMP, Browser off. Print Spooler: queue pre-check before disable.</div><div class="card-meta"><span class="tag l1">CIS 5.x</span><span class="tag l2">+BT, SecLogon</span></div></div>
+        <div class="card" onclick="showFile('registry')"><div class="card-name">RegistryHardening</div><div class="card-desc">Credential Guard, VBS, HVCI, SEHOP, PS logging, RDP NLA+encryption, Autorun, event log sizes.</div><div class="card-meta"><span class="tag l1">CIS 18.x</span><span class="tag l2">+Transcription</span></div></div>
+        <div class="card" onclick="showFile('firewall')"><div class="card-name">FirewallPolicy</div><div class="card-desc">All 3 profiles. Inbound default deny. Packet logging 16MB. Public: outbound deny + no local merge.</div><div class="card-meta"><span class="tag l1">CIS 9.x</span></div></div>
+        <div class="card" onclick="showFile('defender')"><div class="card-name">DefenderPolicy</div><div class="card-desc">16 ASR rules (Audit/Block selectable), cloud protection, PUA, controlled folder access.</div><div class="card-meta"><span class="tag l1">CIS 18.10.43</span><span class="tag l2">+3 rules</span></div></div>
+        <div class="card" onclick="showFile('privaccess')"><div class="card-name">PrivilegedAccess</div><div class="card-desc">DC-only. Unconstrained delegation audit, LAPS check, sensitive group membership logging.</div><div class="card-meta"><span class="tag dc">DC only</span></div></div>
+        <div class="card" onclick="showFile('report')"><div class="card-name">HardeningReport</div><div class="card-desc">31 checks. Pass/Fail per CIS control. JSON output with compliance percentage.</div><div class="card-meta"><span class="tag">Report</span></div></div>
+      </div>
+    </div>
+
+    <!-- Code panel (hidden by default) -->
+    <div id="code-panel" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div class="toolbar">
+        <span class="filepath" id="file-path"></span>
+        <div class="stats" id="file-stats"></div>
+      </div>
+      <div class="code-area">
+        <pre id="code-content"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const files = {
+  orchestrator: {
+    path: 'Invoke-CISHardening.ps1',
+    lang: 'ps1',
+    content: `#Requires -Version 5.1
+#Requires -RunAsAdministrator
+<#
+.SYNOPSIS
+    CIS AD GPO Hardening Script — Main Orchestrator
+.DESCRIPTION
+    Applies CIS Benchmark hardening controls via GPO to Active Directory
+    Domain Controllers, Member Servers, and Workstations.
+    Targets: Windows Server 2019, 2022, Windows 10, Windows 11
+    Baseline: CIS Level 1 and Level 2 (selectable per run)
+    GPO Strategy: Creates named GPO objects linked to the Domain Controllers OU
+.PARAMETER Level
+    CIS benchmark level. L1 (default) or L2.
+.PARAMETER Role
+    Override role detection. Auto-detected if not specified.
+.PARAMETER Modules
+    Comma-separated list of modules to run. Runs all applicable if not specified.
+.PARAMETER WhatIf
+    Preview all changes without applying anything.
+.PARAMETER AuditMode
+    Run pre-deployment readiness checks only. No changes applied.
+.PARAMETER Rollback
+    Invoke rollback from a previous snapshot.
+.PARAMETER ASRMode
+    Attack Surface Reduction mode: Audit (default) or Block.
+.EXAMPLE
+    .\\Invoke-CISHardening.ps1 -WhatIf
+.EXAMPLE
+    .\\Invoke-CISHardening.ps1 -Level L1 -AuditMode
+.EXAMPLE
+    .\\Invoke-CISHardening.ps1 -Level L2 -ASRMode Block -Modules DefenderPolicy
+.EXAMPLE
+    .\\Invoke-CISHardening.ps1 -Rollback -RollbackPath .\\CISHardening_Output\\Rollback\\20241201_143022
+#>
+
+[CmdletBinding(DefaultParameterSetName = 'Apply', SupportsShouldProcess)]
+param(
+    [ValidateSet('L1', 'L2')][string]$Level = 'L1',
+    [ValidateSet('DomainController', 'MemberServer', 'Workstation', 'Auto')][string]$Role = 'Auto',
+    [string[]]$Modules = @(),
+    [switch]$WhatIf,
+    [Parameter(ParameterSetName = 'Audit', Mandatory)][switch]$AuditMode,
+    [Parameter(ParameterSetName = 'Rollback', Mandatory)][switch]$Rollback,
+    [Parameter(ParameterSetName = 'Rollback', Mandatory)][string]$RollbackPath,
+    [string]$RollbackModule = 'All',
+    [ValidateSet('Audit', 'Block')][string]$ASRMode = 'Audit',
+    [string]$OutputPath = '.\\CISHardening_Output',
+    [switch]$SkipSnapshot
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# ── Resolve paths ─────────────────────────────────────────────────────
+$ScriptRoot   = $PSScriptRoot
+$ModulesPath  = Join-Path $ScriptRoot 'Modules'
+$ProfilesPath = Join-Path $ScriptRoot 'Profiles'
+$OutputPath   = [System.IO.Path]::GetFullPath($OutputPath)
+$null = New-Item -ItemType Directory -Path $OutputPath -Force
+
+# ── Load core modules ─────────────────────────────────────────────────
+foreach ($cm in @('Logging', 'RoleDetection', 'Snapshot')) {
+    $path = Join-Path $ModulesPath "Core\\$cm.psm1"
+    if (-not (Test-Path $path)) { throw "Core module not found: $path" }
+    Import-Module $path -Force -Global
+}
+
+Initialize-HardeningLog -OutputPath $OutputPath -Level INFO -WhatIf:$WhatIf
+
+# ── Rollback mode ─────────────────────────────────────────────────────
+if ($Rollback) {
+    Assert-GroupPolicyModuleAvailable
+    Invoke-HardeningRollback -RollbackPath $RollbackPath -Module $RollbackModule -WhatIf:$WhatIf
+    Close-HardeningLog; exit 0
+}
+
+# ── Role detection ────────────────────────────────────────────────────
+$MachineInfo = Get-MachineRole
+if ($Role -ne 'Auto') {
+    $MachineInfo.Role = $Role
+    $MachineInfo.IsDC = ($Role -eq 'DomainController')
+    $MachineInfo.IsMemberServer = ($Role -eq 'MemberServer')
+    $MachineInfo.IsWorkstation  = ($Role -eq 'Workstation')
+}
+
+Write-HardeningLog -Level INFO -Module 'Orchestrator' -Message "Role: $($MachineInfo.Role) | OS: $($MachineInfo.OSCaption)"
+
+# ── Prerequisites ─────────────────────────────────────────────────────
+Assert-ADModuleAvailable
+Assert-GroupPolicyModuleAvailable
+
+# ── Load profile ──────────────────────────────────────────────────────
+$profileFile    = Join-Path $ProfilesPath "$($MachineInfo.Role).json"
+$profileData    = Get-Content $profileFile -Raw
+$profileObj     = $profileData | ConvertFrom-Json
+$moduleSequence = if ($Modules.Count -gt 0) { $Modules } else { $profileObj.Modules }
+$skipModules    = $profileObj.SkipModules
+
+# ── Domain Controllers OU ─────────────────────────────────────────────
+$DCOU = Get-DomainControllersOU
+
+# ── Pre-flight snapshot ───────────────────────────────────────────────
+if (-not $AuditMode -and -not $SkipSnapshot) {
+    $snapshotDir = New-RollbackSnapshot -BaseOutputPath $OutputPath -WhatIf:$WhatIf
+}
+
+# ── Module dispatch ───────────────────────────────────────────────────
+$moduleDispatch = @{
+    'AccountPolicy'    = { Invoke-AccountPolicyHardening    -MachineInfo $MachineInfo -ProfileData $profileData -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'AuditPolicy'      = { Invoke-AuditPolicyHardening      -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'SecurityOptions'  = { Invoke-SecurityOptionsHardening  -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'UserRights'       = { Invoke-UserRightsHardening       -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'TLSHardening'     = { if ($AuditMode) { Test-TLSReadiness }; Invoke-TLSHardening -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'NetworkHardening' = { Invoke-NetworkHardening          -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'WinRMHardening'   = { Invoke-WinRMHardening            -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'ServicesHardening'= { Invoke-ServicesHardening         -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'RegistryHardening'= { Invoke-RegistryHardening         -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'FirewallPolicy'   = { Invoke-FirewallPolicyHardening   -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'DefenderPolicy'   = { Invoke-DefenderPolicyHardening   -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -ASRMode $ASRMode -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'PrivilegedAccess' = { Invoke-PrivilegedAccessHardening -MachineInfo $MachineInfo -DomainControllersOU $DCOU -Level $Level -WhatIf:$WhatIf -AuditMode:$AuditMode }
+    'HardeningReport'  = { Invoke-HardeningReport          -MachineInfo $MachineInfo -OutputPath $OutputPath -Level $Level }
+}
+
+$succeeded = [System.Collections.Generic.List[string]]::new()
+$failed    = [System.Collections.Generic.List[string]]::new()
+
+foreach ($moduleName in $moduleSequence) {
+    if ($moduleName -in $skipModules) { continue }
+    $path = Join-Path $ModulesPath "$moduleName\\$moduleName.psm1"
+    if (Test-Path $path) { Import-Module $path -Force -Global }
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        & $moduleDispatch[$moduleName]
+        $sw.Stop()
+        Write-HardeningLog -Level SUCCESS -Module 'Orchestrator' -Message "$moduleName completed in $($sw.Elapsed.TotalSeconds.ToString('F1'))s"
+        $succeeded.Add($moduleName)
+    } catch {
+        $sw.Stop()
+        Write-HardeningLog -Level ERROR -Module 'Orchestrator' -Message "$moduleName FAILED: $_"
+        $failed.Add($moduleName)
+    }
+}
+
+# ── Summary ───────────────────────────────────────────────────────────
+Write-HardeningLog -Level INFO -Module 'Orchestrator' -Message "Succeeded: $($succeeded.Count) | Failed: $($failed.Count)"
+if (-not $AuditMode -and -not $WhatIf -and $succeeded.Count -gt 0) {
+    Write-HardeningLog -Level WARN -Module 'Orchestrator' -Message "Run 'gpupdate /force' on all targets"
+    if ('TLSHardening' -in $succeeded) {
+        Write-HardeningLog -Level WARN -Module 'Orchestrator' -Message "TLS changes require a REBOOT on all targets"
+    }
+}
+Close-HardeningLog
+exit $(if ($failed.Count -gt 0) { 1 } else { 0 })`
+  },
+
+  snapshot: {
+    path: 'Modules/Core/Snapshot.psm1',
+    lang: 'ps1',
+    content: `#Requires -Version 5.1
+<#
+.SYNOPSIS   CIS Hardening Script — Snapshot and Rollback Module
+.DESCRIPTION
+    Three-layer rollback system:
+      Layer 1 — Backup-GPO  : full GPO backup before any changes
+      Layer 2 — secedit     : local security DB export (.inf)
+      Layer 3 — auditpol    : audit policy CSV export
+    Tracks every GPO GUID created by the script in manifest.json.
+#>
+
+$script:Manifest    = $null
+$script:SnapshotDir = $null
+
+function New-RollbackSnapshot {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)][string]$BaseOutputPath,
+        [switch]$WhatIf
+    )
+    $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $script:SnapshotDir = Join-Path $BaseOutputPath "Rollback\\$ts"
+    $null = New-Item -ItemType Directory -Path $script:SnapshotDir -Force
+    $null = New-Item -ItemType Directory -Path (Join-Path $script:SnapshotDir 'GPOBackup') -Force
+
+    # Layer 1 — Full GPO backup
+    if (-not $WhatIf) {
+        Assert-GroupPolicyModuleAvailable
+        Backup-GPO -All -Path (Join-Path $script:SnapshotDir 'GPOBackup') -ErrorAction Stop | Out-Null
+        Write-HardeningLog -Level SUCCESS -Module 'Snapshot' -Message "GPO backup complete"
+    }
+
+    # Layer 2 — secedit export
+    if (-not $WhatIf) {
+        $secInf = Join-Path $script:SnapshotDir 'secedit_pre.inf'
+        & secedit.exe /export /cfg $secInf /quiet 2>&1 | Out-Null
+        Write-HardeningLog -Level SUCCESS -Module 'Snapshot' -Message "secedit export -> $secInf"
+    }
+
+    # Layer 3 — auditpol backup
+    if (-not $WhatIf) {
+        $auditCsv = Join-Path $script:SnapshotDir 'auditpol_pre.csv'
+        & auditpol.exe /backup /file:$auditCsv 2>&1 | Out-Null
+        Write-HardeningLog -Level SUCCESS -Module 'Snapshot' -Message "auditpol backup -> $auditCsv"
+    }
+
+    # Initialise manifest
+    $script:Manifest = [PSCustomObject]@{
+        SnapshotTimestamp = $ts
+        ComputerName      = $env:COMPUTERNAME
+        GPOsCreated       = [System.Collections.Generic.List[PSCustomObject]]::new()
+        ModulesApplied    = [System.Collections.Generic.List[string]]::new()
+        ServicesModified  = [System.Collections.Generic.List[PSCustomObject]]::new()
+    }
+    Save-Manifest
+    return $script:SnapshotDir
+}
+
+function Register-CreatedGPO {
+    param(
+        [Parameter(Mandatory)][string]$GPOName,
+        [Parameter(Mandatory)][string]$GPOGuid,
+        [Parameter(Mandatory)][string]$Module,
+        [string]$LinkedOU = ''
+    )
+    $script:Manifest.GPOsCreated.Add([PSCustomObject]@{
+        GPOName=  $GPOName; GPOGuid=$GPOGuid; Module=$Module; LinkedOU=$LinkedOU
+        CreatedAt=(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    })
+    Save-Manifest
+}
+
+function Register-ServiceModified {
+    param(
+        [Parameter(Mandatory)][string]$ServiceName,
+        [Parameter(Mandatory)][string]$OriginalStartType,
+        [Parameter(Mandatory)][string]$NewStartType
+    )
+    $script:Manifest.ServicesModified.Add([PSCustomObject]@{
+        ServiceName=$ServiceName; OriginalStartType=$OriginalStartType; NewStartType=$NewStartType
+    })
+    Save-Manifest
+}
+
+function Save-Manifest {
+    if ($null -eq $script:SnapshotDir) { return }
+    $script:Manifest | ConvertTo-Json -Depth 10 |
+        Out-File (Join-Path $script:SnapshotDir 'manifest.json') -Encoding UTF8 -Force
+}
+
+function Invoke-HardeningRollback {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)][string]$RollbackPath,
+        [string]$Module = 'All',
+        [switch]$WhatIf
+    )
+    Write-HardeningLog -Level WARN -Module 'Rollback' -Message "=== ROLLBACK INITIATED ==="
+    $manifest = Get-Content (Join-Path $RollbackPath 'manifest.json') -Raw | ConvertFrom-Json
+
+    # Step 1 — Remove created GPOs
+    Assert-GroupPolicyModuleAvailable
+    $gposToRemove = if ($Module -eq 'All') { $manifest.GPOsCreated }
+                    else { $manifest.GPOsCreated | Where-Object Module -eq $Module }
+    foreach ($gpo in $gposToRemove) {
+        if (-not $WhatIf) {
+            if ($gpo.LinkedOU) { Remove-GPLink -Name $gpo.GPOName -Target $gpo.LinkedOU -ErrorAction SilentlyContinue }
+            Remove-GPO -Name $gpo.GPOName -ErrorAction Stop
+            Write-HardeningLog -Level SUCCESS -Module 'Rollback' -Message "Removed GPO: $($gpo.GPOName)"
+        }
+    }
+
+    if ($Module -eq 'All') {
+        # Step 2 — Restore secedit
+        $secInf = Join-Path $RollbackPath 'secedit_pre.inf'
+        if ((Test-Path $secInf) -and -not $WhatIf) {
+            $db = Join-Path $env:TEMP 'secedit_rollback.sdb'
+            & secedit.exe /configure /cfg $secInf /db $db /quiet 2>&1 | Out-Null
+            Write-HardeningLog -Level SUCCESS -Module 'Rollback' -Message "Security policy restored"
+        }
+
+        # Step 3 — Restore auditpol
+        $auditCsv = Join-Path $RollbackPath 'auditpol_pre.csv'
+        if ((Test-Path $auditCsv) -and -not $WhatIf) {
+            & auditpol.exe /restore /file:$auditCsv 2>&1 | Out-Null
+            Write-HardeningLog -Level SUCCESS -Module 'Rollback' -Message "Audit policy restored"
+        }
+
+        # Step 4 — Restore services
+        foreach ($svc in $manifest.ServicesModified) {
+            if (-not $WhatIf) {
+                Set-Service -Name $svc.ServiceName -StartupType $svc.OriginalStartType -ErrorAction Stop
+                if ($svc.OriginalStartType -in 'Automatic','Manual') {
+                    Start-Service -Name $svc.ServiceName -ErrorAction SilentlyContinue
+                }
+                Write-HardeningLog -Level SUCCESS -Module 'Rollback' -Message "Restored service: $($svc.ServiceName)"
+            }
+        }
+    }
+    Write-HardeningLog -Level SUCCESS -Module 'Rollback' -Message "=== ROLLBACK COMPLETE — run gpupdate /force ==="
+    Write-HardeningLog -Level WARN   -Module 'Rollback' -Message "TLS changes require a REBOOT to take effect."
+}
+
+Export-ModuleMember -Function New-RollbackSnapshot, Register-CreatedGPO, Register-ServiceModified,
+                               Register-ModuleApplied, Save-Manifest, Get-SnapshotPath, Invoke-HardeningRollback`
+  },
+
+  tls: {
+    path: 'Modules/TLSHardening/TLSHardening.psm1',
+    lang: 'ps1',
+    content: `#Requires -Version 5.1
+<#
+.SYNOPSIS   CIS Hardening — TLS / SChannel Hardening Module
+.DESCRIPTION
+    Disables SSL 2.0, SSL 3.0, TLS 1.0, TLS 1.1.
+    Enables TLS 1.2 and TLS 1.3 explicitly.
+    Disables RC4, DES, 3DES, NULL ciphers.
+    Enforces AES-256-GCM cipher suite priority.
+    Enforces DH minimum key size: 2048 bits.
+    IMPORTANT: All changes require a REBOOT to take effect.
+    CIS Sections: 18.4.x, SCHANNEL registry path
+#>
+
+function Invoke-TLSHardening {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)][hashtable]$MachineInfo,
+        [Parameter(Mandatory)][string]$DomainControllersOU,
+        [ValidateSet('L1','L2')][string]$Level = 'L1',
+        [switch]$WhatIf,
+        [switch]$AuditMode
+    )
+
+    $mod     = 'TLSHardening'
+    $schBase = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL'
+    Write-HardeningLog -Level WARN -Module $mod -Message "TLS changes require a REBOOT to take effect"
+
+    $protocols = @(
+        @{ Name='SSL 2.0'; Enabled=0; DisabledByDefault=1 }
+        @{ Name='SSL 3.0'; Enabled=0; DisabledByDefault=1 }
+        @{ Name='TLS 1.0'; Enabled=0; DisabledByDefault=1 }
+        @{ Name='TLS 1.1'; Enabled=0; DisabledByDefault=1 }
+        @{ Name='TLS 1.2'; Enabled=1; DisabledByDefault=0 }
+        @{ Name='TLS 1.3'; Enabled=1; DisabledByDefault=0 }
+    )
+
+    $disabledCiphers = @('NULL','DES 56/56','RC2 40/128','RC2 56/128','RC2 128/128',
+                         'RC4 40/128','RC4 56/128','RC4 64/128','RC4 128/128','Triple DES 168')
+
+    $disabledHashes  = @('MD5')
+    $l2Hashes        = @('SHA')   # Deprecate SHA-1 at L2
+
+    $cipherSuiteOrder = @(
+        'TLS_AES_256_GCM_SHA384',           # TLS 1.3
+        'TLS_AES_128_GCM_SHA256',
+        'TLS_CHACHA20_POLY1305_SHA256',
+        'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',  # TLS 1.2
+        'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
+        'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+        'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+        'TLS_DHE_RSA_WITH_AES_256_GCM_SHA384',
+        'TLS_DHE_RSA_WITH_AES_128_GCM_SHA256'
+    )
+
+    if ($AuditMode) {
+        Write-HardeningLog -Level INFO -Module $mod -Message "[AUDIT] Checking current SChannel protocol configuration..."
+        foreach ($proto in $protocols) {
+            foreach ($side in @('Client','Server')) {
+                $regPath = "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\$($proto.Name)\\$side"
+                $enabled = (Get-ItemProperty -Path $regPath -Name 'Enabled' -ErrorAction SilentlyContinue)?.Enabled
+                $status  = if ($null -eq $enabled) { 'Not set (OS default)' }
+                           elseif ($enabled -eq 1)  { 'ENABLED' } else { 'Disabled' }
+                Write-HardeningLog -Level INFO -Module $mod -Message "[AUDIT]   $($proto.Name) $side : $status"
+            }
+        }
+        Write-HardeningLog -Level WARN -Module $mod -Message "[AUDIT] Set EventLogging=7 to capture live TLS negotiation failures before deploying"
+        return
+    }
+
+    $gpoName = "CIS-$($MachineInfo.Role)-TLSHardening-$Level"
+
+    if (-not $WhatIf) {
+        $existingGPO = Get-GPO -Name $gpoName -ErrorAction SilentlyContinue
+        if ($existingGPO) { Remove-GPO -Name $gpoName -ErrorAction SilentlyContinue }
+        $gpo = New-GPO -Name $gpoName -Comment "CIS $Level TLS/SChannel — $(Get-Date -Format 'yyyy-MM-dd')" -ErrorAction Stop
+
+        # Set protocol Enabled + DisabledByDefault for Client and Server
+        foreach ($proto in $protocols) {
+            foreach ($side in @('Client','Server')) {
+                $regKey = "$schBase\\Protocols\\$($proto.Name)\\$side"
+                Set-GPRegistryValue -Name $gpoName -Key $regKey -ValueName 'Enabled'           -Type DWord -Value $proto.Enabled          | Out-Null
+                Set-GPRegistryValue -Name $gpoName -Key $regKey -ValueName 'DisabledByDefault'  -Type DWord -Value $proto.DisabledByDefault | Out-Null
+            }
+        }
+
+        # Disable weak ciphers
+        foreach ($cipher in $disabledCiphers) {
+            Set-GPRegistryValue -Name $gpoName -Key "$schBase\\Ciphers\\$cipher" -ValueName 'Enabled' -Type DWord -Value 0 | Out-Null
+        }
+
+        # Disable weak hashes
+        $hashesToDisable = $disabledHashes + (if ($Level -eq 'L2') { $l2Hashes } else { @() })
+        foreach ($hash in $hashesToDisable) {
+            Set-GPRegistryValue -Name $gpoName -Key "$schBase\\Hashes\\$hash" -ValueName 'Enabled' -Type DWord -Value 0 | Out-Null
+        }
+
+        # DH minimum key size: 2048
+        Set-GPRegistryValue -Name $gpoName -Key "$schBase\\KeyExchangeAlgorithms\\Diffie-Hellman" `
+            -ValueName 'ServerMinKeyBitLength' -Type DWord -Value 2048 | Out-Null
+
+        # Cipher suite ordering
+        Set-GPRegistryValue -Name $gpoName `
+            -Key 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Cryptography\\Configuration\\SSL\\00010002' `
+            -ValueName 'Functions' -Type String -Value ($cipherSuiteOrder -join ',') | Out-Null
+
+        New-GPLink -Name $gpoName -Target $DomainControllersOU -LinkEnabled Yes -ErrorAction Stop | Out-Null
+        Register-CreatedGPO -GPOName $gpoName -GPOGuid $gpo.Id.ToString() -Module $mod -LinkedOU $DomainControllersOU
+        Register-ModuleApplied -ModuleName $mod
+        Write-HardeningLog -Level SUCCESS -Module $mod -Message "TLS hardening complete — REBOOT REQUIRED on all targets"
+    }
+}
+
+function Test-TLSReadiness {
+    # Check SChannel event log for recent negotiation failures (last 7 days)
+    $events = Get-WinEvent -FilterHashtable @{
+        LogName='System'; Id=@(36871,36874); StartTime=(Get-Date).AddDays(-7)
+    } -ErrorAction SilentlyContinue
+
+    if ($events) {
+        Write-HardeningLog -Level WARN -Module 'TLSHardening' -Message "Found $($events.Count) SChannel errors in last 7 days — review before deploying"
+    } else {
+        Write-HardeningLog -Level SUCCESS -Module 'TLSHardening' -Message "No SChannel negotiation failures found in last 7 days — clear to proceed"
+    }
+}
+
+Export-ModuleMember -Function Invoke-TLSHardening, Test-TLSReadiness`
+  },
+
+  services: {
+    path: 'Modules/ServicesHardening/ServicesHardening.psm1',
+    lang: 'ps1',
+    content: `#Requires -Version 5.1
+<#
+.SYNOPSIS   CIS Hardening — Services Hardening Module
+.DESCRIPTION
+    Disables legacy and unnecessary services.
+    Print Spooler: pre-checks active queues before disabling on DC/MS.
+    Records original service start types for rollback.
+    CIS Section: 5.x
+#>
+
+function Invoke-ServicesHardening {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)][hashtable]$MachineInfo,
+        [Parameter(Mandatory)][string]$DomainControllersOU,
+        [ValidateSet('L1','L2')][string]$Level = 'L1',
+        [switch]$WhatIf,
+        [switch]$AuditMode
+    )
+
+    $mod = 'ServicesHardening'
+
+    # Service definitions — Name, CIS ref, description, applicable roles, CIS level
+    $servicesToDisable = @(
+        @{ Name='TlntSvr';        Ref='5.x';   Desc='Telnet — plaintext protocol';             Roles=@('DomainController','MemberServer','Workstation'); Level='L1' }
+        @{ Name='RemoteRegistry'; Ref='5.27';  Desc='Remote Registry — no remote reg access'; Roles=@('DomainController','MemberServer','Workstation'); Level='L1' }
+        @{ Name='SNMP';           Ref='5.x';   Desc='SNMP Service';                           Roles=@('DomainController','MemberServer','Workstation'); Level='L1' }
+        @{ Name='Browser';        Ref='5.x';   Desc='Computer Browser — legacy protocol';     Roles=@('DomainController','MemberServer','Workstation'); Level='L1' }
+        @{ Name='MSFTPSVC';       Ref='5.x';   Desc='FTP Publishing — plaintext';             Roles=@('DomainController','MemberServer');               Level='L1' }
+        @{ Name='W3SVC';          Ref='5.x';   Desc='IIS (disable unless web server)';        Roles=@('DomainController');                              Level='L1' }
+        @{ Name='SharedAccess';   Ref='5.x';   Desc='Internet Connection Sharing';            Roles=@('DomainController','MemberServer','Workstation'); Level='L1' }
+        @{ Name='XblAuthManager'; Ref='5.x';   Desc='Xbox Live Auth Manager';                 Roles=@('Workstation');                                   Level='L1' }
+        @{ Name='XblGameSave';    Ref='5.x';   Desc='Xbox Live Game Save';                    Roles=@('Workstation');                                   Level='L1' }
+        @{ Name='bthserv';        Ref='5.x';   Desc='Bluetooth (if no BT hardware)';          Roles=@('DomainController','MemberServer');               Level='L2' }
+        @{ Name='seclogon';       Ref='5.x';   Desc='Secondary Logon — RunAs abuse vector';   Roles=@('DomainController','MemberServer');               Level='L2' }
+    )
+
+    # Print Spooler — special handling (PrintNightmare, CIS 5.29)
+    $spoolerRoles = @('DomainController','MemberServer')
+
+    if ($AuditMode) {
+        Write-HardeningLog -Level INFO -Module $mod -Message "[AUDIT] Checking services to be disabled..."
+        $applicable = $servicesToDisable | Where-Object { $MachineInfo.Role -in $_.Roles }
+        foreach ($svcDef in $applicable) {
+            $svc = Get-Service -Name $svcDef.Name -ErrorAction SilentlyContinue
+            if ($svc) { Write-HardeningLog -Level INFO -Module $mod -Message "[AUDIT]   $($svcDef.Name): $($svc.StartType) / $($svc.Status)" }
+        }
+
+        # Critical: check Print Spooler queues
+        if ($MachineInfo.Role -in $spoolerRoles) {
+            $queues = Get-Printer -ErrorAction SilentlyContinue
+            if ($queues.Count -gt 0) {
+                Write-HardeningLog -Level WARN -Module $mod -Message "[AUDIT] WARNING: $($queues.Count) active print queues — Spooler disable will be SKIPPED"
+                foreach ($q in $queues) {
+                    Write-HardeningLog -Level WARN -Module $mod -Message "[AUDIT]   Queue: $($q.Name) (Driver: $($q.DriverName))"
+                }
+            } else {
+                Write-HardeningLog -Level SUCCESS -Module $mod -Message "[AUDIT] No print queues — Spooler safe to disable"
+            }
+        }
+        return
+    }
+
+    $gpoName = "CIS-$($MachineInfo.Role)-ServicesHardening-$Level"
+
+    if (-not $WhatIf) {
+        $existingGPO = Get-GPO -Name $gpoName -ErrorAction SilentlyContinue
+        if ($existingGPO) { Remove-GPO -Name $gpoName -ErrorAction SilentlyContinue }
+        $gpo = New-GPO -Name $gpoName -Comment "CIS $Level Services Hardening — $(Get-Date -Format 'yyyy-MM-dd')" -ErrorAction Stop
+
+        $applicable = $servicesToDisable | Where-Object {
+            $MachineInfo.Role -in $_.Roles -and
+            ($_.Level -eq 'L1' -or ($_.Level -eq 'L2' -and $Level -eq 'L2'))
+        }
+
+        foreach ($svcDef in $applicable) {
+            $svc = Get-Service -Name $svcDef.Name -ErrorAction SilentlyContinue
+            if (-not $svc) { continue }
+
+            Register-ServiceModified -ServiceName $svcDef.Name `
+                -OriginalStartType $svc.StartType.ToString() -NewStartType 'Disabled'
+
+            Set-Service -Name $svcDef.Name -StartupType Disabled -ErrorAction Stop
+            if ($svc.Status -eq 'Running') { Stop-Service -Name $svcDef.Name -Force -ErrorAction SilentlyContinue }
+
+            Set-GPRegistryValue -Name $gpoName -Key "HKLM\\SYSTEM\\CurrentControlSet\\Services\\$($svcDef.Name)" `
+                -ValueName 'Start' -Type DWord -Value 4 | Out-Null   # 4 = Disabled
+
+            Write-HardeningLog -Level SUCCESS -Module $mod -Message "Disabled: $($svcDef.Name) — $($svcDef.Desc)"
+        }
+
+        # Print Spooler — role-gated with queue pre-check
+        if ($MachineInfo.Role -in $spoolerRoles) {
+            $queues = Get-Printer -ErrorAction SilentlyContinue
+            if ($queues.Count -gt 0) {
+                Write-HardeningLog -Level WARN -Module $mod -Message "SKIPPING Spooler — $($queues.Count) active queue(s). Migrate queues then re-run -Module ServicesHardening"
+            } else {
+                $spooler = Get-Service -Name 'Spooler' -ErrorAction SilentlyContinue
+                if ($spooler) {
+                    Register-ServiceModified -ServiceName 'Spooler' -OriginalStartType $spooler.StartType.ToString() -NewStartType 'Disabled'
+                    Stop-Service -Name 'Spooler' -Force -ErrorAction SilentlyContinue
+                    Set-Service  -Name 'Spooler' -StartupType Disabled -ErrorAction Stop
+                    Set-GPRegistryValue -Name $gpoName -Key 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\Spooler' `
+                        -ValueName 'Start' -Type DWord -Value 4 | Out-Null
+                    Write-HardeningLog -Level SUCCESS -Module $mod -Message "Print Spooler disabled (PrintNightmare mitigation)"
+                }
+            }
+        }
+
+        New-GPLink -Name $gpoName -Target $DomainControllersOU -LinkEnabled Yes -ErrorAction Stop | Out-Null
+        Register-CreatedGPO -GPOName $gpoName -GPOGuid $gpo.Id.ToString() -Module $mod -LinkedOU $DomainControllersOU
+        Register-ModuleApplied -ModuleName $mod
+        Write-HardeningLog -Level SUCCESS -Module $mod -Message "Services hardening complete"
+    }
+}
+
+Export-ModuleMember -Function Invoke-ServicesHardening`
+  },
+
+  'dc-profile': {
+    path: 'Profiles/DomainController.json',
+    lang: 'json',
+    content: `{
+  "Role": "DomainController",
+  "Description": "CIS hardening profile for Windows Domain Controllers",
+  "PasswordPolicy": {
+    "MinLength": 14,
+    "MaxAge": 365,
+    "MinAge": 1,
+    "History": 24
+  },
+  "LockoutPolicy": {
+    "Threshold": 5,
+    "DurationMinutes": 15,
+    "ResetMinutes": 15
+  },
+  "KerberosPolicy": {
+    "MaxTicketAge": 10,
+    "MaxRenewalAge": 7,
+    "MaxServiceAge": 600,
+    "MaxClockSkew": 5
+  },
+  "Modules": [
+    "AccountPolicy",
+    "AuditPolicy",
+    "SecurityOptions",
+    "UserRights",
+    "TLSHardening",
+    "NetworkHardening",
+    "WinRMHardening",
+    "ServicesHardening",
+    "RegistryHardening",
+    "FirewallPolicy",
+    "DefenderPolicy",
+    "PrivilegedAccess",
+    "HardeningReport"
+  ],
+  "SkipModules": [],
+  "Notes": [
+    "Print Spooler disabled unconditionally on DCs (PrintNightmare)",
+    "Kerberos AES-only (SupportedEncryptionTypes = 0x7FFFFFF8)",
+    "LDAP channel binding and server signing enforced",
+    "Cached credentials = 0",
+    "Protected Users enforcement — manual group population required",
+    "Enterprise Admins and Schema Admins Restricted Groups — manual GPMC action"
+  ]
+}`
+  },
+
+  'ms-profile': {
+    path: 'Profiles/MemberServer.json',
+    lang: 'json',
+    content: `{
+  "Role": "MemberServer",
+  "Description": "CIS hardening profile for Windows Member Servers",
+  "PasswordPolicy": { "MinLength": 14, "MaxAge": 365, "MinAge": 1, "History": 24 },
+  "LockoutPolicy":  { "Threshold": 5, "DurationMinutes": 15, "ResetMinutes": 15 },
+  "Modules": [
+    "AccountPolicy", "AuditPolicy", "SecurityOptions", "UserRights",
+    "TLSHardening", "NetworkHardening", "WinRMHardening", "ServicesHardening",
+    "RegistryHardening", "FirewallPolicy", "DefenderPolicy", "HardeningReport"
+  ],
+  "SkipModules": ["PrivilegedAccess"],
+  "Notes": [
+    "Print Spooler: queue pre-check before disabling — skipped if queues found",
+    "SeDenyNetworkLogonRight includes local accounts (*S-1-5-113) — blocks pass-the-hash",
+    "LDAP client signing enforced (LDAPClientIntegrity = 2)",
+    "Cached credentials: 4 (not 0 like DCs)",
+    "PrivilegedAccess module skipped — DC-only",
+    "LDAP channel binding and server signing NOT enforced (MS-only, no NTDS)"
+  ]
+}`
+  },
+
+  'ws-profile': {
+    path: 'Profiles/Workstation.json',
+    lang: 'json',
+    content: `{
+  "Role": "Workstation",
+  "Description": "CIS hardening profile for Windows 10/11 Workstations",
+  "PasswordPolicy": { "MinLength": 14, "MaxAge": 365, "MinAge": 1, "History": 24 },
+  "LockoutPolicy":  { "Threshold": 5, "DurationMinutes": 15, "ResetMinutes": 15 },
+  "Modules": [
+    "AccountPolicy", "AuditPolicy", "SecurityOptions", "UserRights",
+    "TLSHardening", "NetworkHardening", "WinRMHardening", "ServicesHardening",
+    "RegistryHardening", "FirewallPolicy", "DefenderPolicy", "HardeningReport"
+  ],
+  "SkipModules": ["PrivilegedAccess"],
+  "Notes": [
+    "Print Spooler: kept running on workstations (users need local printing + Print to PDF)",
+    "Xbox services disabled (XblAuthManager, XblGameSave, XboxNetApiSvc)",
+    "Cached credentials: 4",
+    "ASR rules applied — Audit mode strongly recommended before Block",
+    "RDP clipboard disable is L2 only — apply with caution for power users"
+  ]
+}`
+  }
+};
+
+// Stubs for files not fully inlined
+const stubs = {
+  logging:       { path: 'Modules/Core/Logging.psm1',                  desc: 'Centralised logging with colour-coded console, structured entries list, log level filtering. Functions: Initialize-HardeningLog, Write-HardeningLog, Get-HardeningLog, Close-HardeningLog.' },
+  roledetection: { path: 'Modules/Core/RoleDetection.psm1',            desc: 'Reads Win32_ComputerSystem.DomainRole (0-5), maps to role string, resolves DC OU DN, validates AD and GroupPolicy RSAT modules. Functions: Get-MachineRole, Get-DCsInDomain, Get-DomainControllersOU, Assert-ADModuleAvailable, Assert-GroupPolicyModuleAvailable.' },
+  accountpolicy: { path: 'Modules/AccountPolicy/AccountPolicy.psm1',    desc: 'Password (min 14, complexity, history 24), lockout (5 attempts, 15 min), Kerberos AES-only on DCs. secedit INF + GPO. CIS 1.1, 1.2, 1.3.' },
+  auditpolicy:   { path: 'Modules/AuditPolicy/AuditPolicy.psm1',        desc: '53 audit subcategories via auditpol.exe. All 9 categories. DC extras: DS Access, Kerberos. L2 extras: DPAPI, detailed file share. Command-line logging, 90% log capacity warning. CIS 17.x.' },
+  secopts:       { path: 'Modules/SecurityOptions/SecurityOptions.psm1', desc: '46 registry settings. UAC (9 keys), LM auth level, NTLM min session security, SMB signing (client+server), WDigest, LDAP signing+channel binding (DC), null session pipes/shares, domain member secure channel, inactivity lock 900s, CTRL+ALT+DEL, legal notice. CIS 2.3.x.' },
+  userrights:    { path: 'Modules/UserRights/UserRights.psm1',           desc: '39 privilege assignments via secedit INF. SeTcbPrivilege/SeCreateTokenPrivilege/SeSyncAgentPrivilege/SeEnableDelegationPrivilege empty. SeImpersonatePrivilege scoped. MS: local accounts denied network logon. CIS 2.2.x.' },
+  network:       { path: 'Modules/NetworkHardening/NetworkHardening.psm1', desc: 'LLMNR/NetBIOS/WPAD/mDNS disabled. SMBv1 via Set-SmbServerConfiguration. Per-adapter NetBIOS off via WMI. Source routing, ICMP redirects, SYN attack protection, NTLM audit, simultaneous connections limit. CIS 18.5.x.' },
+  winrm:         { path: 'Modules/WinRMHardening/WinRMHardening.psm1',  desc: 'WinRM client + service: basic auth off, unencrypted off, digest off. Windows Remote Shell disabled. L2: HTTP listener removal, Negotiate auth off. CIS 18.9.102.x.' },
+  registry:      { path: 'Modules/RegistryHardening/RegistryHardening.psm1', desc: 'Credential Guard (LsaCfgFlags=1), VBS, HVCI, SEHOP, safe DLL search. PS script block + module logging. RDP NLA, encryption High, idle/disconnect timeouts. Autorun/Autoplay off. MSI elevation off. Telemetry 0. Event log sizes (Security=1GB). L2: transcription, RDP clipboard/drive redirect off. CIS 18.x.' },
+  firewall:      { path: 'Modules/FirewallPolicy/FirewallPolicy.psm1',   desc: 'All 3 profiles (Domain/Private/Public). Domain/Private: inbound block, outbound allow. Public: inbound+outbound block. Packet logging 16MB per profile. No unicast multicast response. L2 servers: no local policy merge. CIS 9.x.' },
+  defender:      { path: 'Modules/DefenderPolicy/DefenderPolicy.psm1',   desc: '16 ASR rules (13 L1, 3 L2). ASRMode Audit|Block. Real-time protection, cloud protection (Advanced), PUA block, signature update 8h. L2: Controlled Folder Access. CIS 18.10.43.x.' },
+  privaccess:    { path: 'Modules/PrivilegedAccess/PrivilegedAccess.psm1', desc: 'DC-only. Unconstrained delegation audit, LAPS deployment check, sensitive group membership logging. AdminSDHolder frequency, Protected Users flag. Restricted Groups manual action documented. CIS AD-tier.' },
+  report:        { path: 'Modules/HardeningReport/HardeningReport.psm1',  desc: '31 compliance checks. Registry value verification, service state checks, SMBv1 check. Pass/Fail/NOT SET per CIS control. JSON output with compliance %. Functions: Invoke-HardeningReport.' }
+};
+
+function showOverview() {
+  document.getElementById('overview-panel').style.display = 'block';
+  document.getElementById('code-panel').style.display = 'none';
+  document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+  document.querySelector('.file-item').classList.add('active');
+}
+
+function showFile(key) {
+  document.getElementById('overview-panel').style.display = 'none';
+  const panel = document.getElementById('code-panel');
+  panel.style.display = 'flex';
+
+  document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  if (files[key]) {
+    const f = files[key];
+    document.getElementById('file-path').innerHTML = formatPath(f.path);
+    const lines = f.content.split('\n');
+    document.getElementById('file-stats').innerHTML = `<span>${lines.length} lines</span>`;
+    document.getElementById('code-content').innerHTML = renderCode(f.content, f.lang);
+  } else if (stubs[key]) {
+    const s = stubs[key];
+    document.getElementById('file-path').innerHTML = formatPath(s.path);
+    document.getElementById('file-stats').innerHTML = `<span>Full source in zip download</span>`;
+    document.getElementById('code-content').innerHTML = renderStub(s.desc, s.path);
+  }
+}
+
+function formatPath(p) {
+  const parts = p.split('/');
+  const file = parts.pop();
+  return parts.map(pt => `<span style="color:#8b949e">${pt}/</span>`).join('') + `<span class="hl">${file}</span>`;
+}
+
+function renderStub(desc, path) {
+  return `<div class="line"><span class="ln">1</span><span class="lc cm"># Full source available in CISHardening_v1.0.zip</span></div>
+<div class="line"><span class="ln">2</span><span class="lc cm"># File: ${path}</span></div>
+<div class="line"><span class="ln">3</span><span class="lc"></span></div>
+<div class="line"><span class="ln">4</span><span class="lc cm"># Module summary:</span></div>
+${desc.split('. ').filter(Boolean).map((s,i) => `<div class="line"><span class="ln">${i+5}</span><span class="lc cm"># ${s}.</span></div>`).join('\n')}`;
+}
+
+function renderCode(src, lang) {
+  const lines = src.split('\n');
+  return lines.map((line, i) => {
+    return `<div class="line"><span class="ln">${i+1}</span><span class="lc">${highlight(line, lang)}</span></div>`;
+  }).join('');
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlight(line, lang) {
+  if (lang === 'json') {
+    return esc(line)
+      .replace(/("[\w-]+")\s*:/g, '<span class="op">$1</span>:')
+      .replace(/:\s*(".*?")/g, ': <span class="str">$1</span>')
+      .replace(/:\s*(\d+)/g, ': <span class="num">$1</span>')
+      .replace(/:\s*(true|false|null)/g, ': <span class="kw">$1</span>');
+  }
+
+  // PowerShell
+  const e = esc(line);
+
+  // Pure comment line
+  if (/^\s*#/.test(line)) return `<span class="cm">${e}</span>`;
+  // Doc comment block lines
+  if (/^\s*\./.test(line.trimStart()) || /^\s*<#/.test(line) || /^\s*#>/.test(line)) return `<span class="doc">${e}</span>`;
+
+  return e
+    // Strings (double-quoted)
+    .replace(/("(?:[^"\\]|\\.)*")/g, '<span class="str">$1</span>')
+    // Single-quoted strings
+    .replace(/('(?:[^'\\]|\\.)*')/g, '<span class="str">$1</span>')
+    // Comments inline
+    .replace(/(#[^<].*$)/g, '<span class="cm">$1</span>')
+    // Keywords
+    .replace(/\b(function|param|return|if|else|elseif|foreach|for|while|switch|try|catch|throw|continue|break|exit|end|begin|process|filter|class|enum|using|Import-Module|Export-ModuleMember|Set-StrictMode|New-Item|Get-Item|Get-ItemProperty|Set-Item|Remove-Item|Write-Host|Out-File|Test-Path|Join-Path|Split-Path|Get-Date|Get-Content|ConvertFrom-Json|ConvertTo-Json|Where-Object|Select-Object|Sort-Object|ForEach-Object|Get-CimInstance|Get-Service|Set-Service|Stop-Service|Start-Service|Get-GPO|New-GPO|Remove-GPO|New-GPLink|Remove-GPLink|Set-GPRegistryValue|Backup-GPO|Restore-GPO|Get-ADDomain|Get-ADUser|Get-ADComputer|Get-ADGroupMember|Get-Printer|Get-SmbSession|Get-SmbServerConfiguration|Set-SmbServerConfiguration|Get-NetFirewallProfile|Get-WinEvent|Get-MpComputerStatus|auditpol|secedit)\b/g, '<span class="kw">$1</span>')
+    // Variables
+    .replace(/(\$[\w:\.]+)/g, '<span class="var">$1</span>')
+    // Parameters  
+    .replace(/\B(-\w+)/g, '<span class="pm">$1</span>')
+    // Types/brackets
+    .replace(/(\[[\w\.]+\])/g, '<span class="op">$1</span>');
+}
+</script>
+</body>
+</html>
